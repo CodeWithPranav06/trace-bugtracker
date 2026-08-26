@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         String    @default("reporter") // "reporter" | "developer" | "admin"
+  createdAt    DateTime  @default(now())
+
+  // Relations
+  ownedProjects Project[]
+  reportedBugs  Bug[]        @relation("Reporter")
+  assignedBugs  Bug[]        @relation("Assignee")
+  comments      Comment[]
+  attachments   Attachment[]
+  activities    Activity[]
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @default("")
+  ownerId     String
+  createdAt   DateTime @default(now())
+
+  // Relations
+  owner User  @relation(fields: [ownerId], references: [id])
+  bugs  Bug[]
+}
+
+model Bug {
+  id          String   @id @default(cuid())
+  projectId   String
+  title       String
+  description String   @default("")
+  status      String   @default("Open") // Open | In Progress | In Review | Resolved | Closed | Reopened
+  severity    String   @default("Minor") // Critical | Major | Minor | Trivial
+  priority    String   @default("P2") // P0 | P1 | P2 | P3
+  reporterId  String
+  assigneeId  String?
+  duplicateOfId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  project     Project      @relation(fields: [projectId], references: [id])
+  reporter    User         @relation("Reporter", fields: [reporterId], references: [id])
+  assignee    User?        @relation("Assignee", fields: [assigneeId], references: [id])
+  duplicateOf Bug?         @relation("Duplicates", fields: [duplicateOfId], references: [id])
+  duplicates  Bug[]        @relation("Duplicates")
+  comments    Comment[]
+  attachments Attachment[]
+  activities  Activity[]
+  labels      BugLabel[]
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  bugId     String
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+
+  // Relations
+  bug    Bug  @relation(fields: [bugId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id])
+}
+
+model Attachment {
+  id           String   @id @default(cuid())
+  bugId        String
+  filename     String
+  url          String
+  uploadedById String
+  createdAt    DateTime @default(now())
+
+  // Relations
+  bug        Bug  @relation(fields: [bugId], references: [id], onDelete: Cascade)
+  uploadedBy User @relation(fields: [uploadedById], references: [id])
+}
+
+model Label {
+  id    String     @id @default(cuid())
+  name  String     @unique
+  color String
+  bugs  BugLabel[]
+}
+
+// Junction table for Bug <-> Label many-to-many
+model BugLabel {
+  bugId   String
+  labelId String
+
+  bug   Bug   @relation(fields: [bugId], references: [id], onDelete: Cascade)
+  label Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([bugId, labelId])
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  bugId     String
+  actorId   String
+  action    String   // "status_change" | "assignment" | "comment" | "created" | "label_change"
+  field     String?  // which field changed
+  oldValue  String?
+  newValue  String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  bug   Bug  @relation(fields: [bugId], references: [id], onDelete: Cascade)
+  actor User @relation(fields: [actorId], references: [id])
+}
